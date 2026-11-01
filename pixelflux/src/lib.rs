@@ -2044,6 +2044,7 @@ fn reap_dead_host(state: &mut AppState) {
         );
     }
     state.host = None;
+    *crate::wayland::pwcapture::HOST_POINTER.lock().unwrap() = None;
     state.host_mode_refusals.clear();
     // Nothing will answer the requests still in flight: their geometry readers get
     // what the outputs show now.
@@ -6010,6 +6011,7 @@ fn run_wayland_thread(cfg: WaylandThreadConfig) {
             ThreadCommand::PointerMotion { x, y, motion } => {
                 state.motion_applied = state.motion_applied.max(motion);
                 if let Some(host) = state.host.as_ref() {
+                    crate::wayland::pwcapture::HOST_MOTION.fetch_max(motion, Ordering::Relaxed);
                     host.pointer_motion_abs(x, y);
                     return;
                 }
@@ -6057,6 +6059,7 @@ fn run_wayland_thread(cfg: WaylandThreadConfig) {
             ThreadCommand::PointerRelativeMotion { dx, dy, motion } => {
                 state.motion_applied = state.motion_applied.max(motion);
                 if let Some(host) = state.host.as_ref() {
+                    crate::wayland::pwcapture::HOST_MOTION.fetch_max(motion, Ordering::Relaxed);
                     host.pointer_motion_rel(dx, dy);
                     return;
                 }
@@ -6844,6 +6847,7 @@ impl WaylandBackend {
     fn pointer_location(&self) -> Option<(f64, f64, f64, u64)> {
         self.pointer
             .read()
+            .or_else(|| *crate::wayland::pwcapture::HOST_POINTER.lock().unwrap())
             .map(|at| (at.x, at.y, at.scale, at.motion))
     }
 
@@ -9257,7 +9261,7 @@ impl ScreenCapture {
     }
     /// Where the Wayland compositor's pointer is, as `(x, y, scale, motion)`
     /// (`WaylandBackend.pointer_location`), or None without a running compositor, before its
-    /// first pass, or under host capture. An X11 session reads its pointer from the X server.
+    /// first pass, or under host capture before the first cursor meta. An X11 session reads its pointer from the X server.
     fn pointer_location(&self, py: Python<'_>) -> Option<(f64, f64, f64, u64)> {
         wayland_backend_running(py).and_then(|be| be.bind(py).borrow().pointer_location())
     }

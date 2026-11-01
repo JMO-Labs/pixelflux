@@ -157,6 +157,31 @@ pub struct StreamConfig {
     pub fps_milli: u32,
     /// The size the consumer expects (the preferred value of the size range).
     pub expect: (i32, i32),
+    /// The output's place in the compositor's logical layout as `(x, y, width, height)`,
+    /// placing its cursor metas in the union layout (`HOST_POINTER`); zero width = unknown.
+    pub layout: (i32, i32, i32, i32),
+}
+
+/// Host capture's pointer, from the newest cursor meta of any output, for
+/// `WaylandBackend.pointer_location`: the compositor's own `PointerShare` stays empty under
+/// host capture, the host compositor owning the pointer. Process-wide like the backend slot.
+pub static HOST_POINTER: Mutex<Option<crate::wayland::frontend::PointerAt>> = Mutex::new(None);
+/// The newest motion number handed to the host session; a cursor meta is taken to include
+/// every move sent before it arrived.
+pub static HOST_MOTION: AtomicU64 = AtomicU64::new(0);
+
+/// Publish a cursor meta's stream-pixel position to `HOST_POINTER` in physical union-layout
+/// pixels, with the output's physical-per-logical scale.
+fn publish_host_pointer(shared: &Shared, x: i32, y: i32) {
+    let (lx, ly, lw, _) = shared.cfg.lock().unwrap().layout;
+    let width = shared.negotiated.lock().unwrap().map_or(0, |n| n.width);
+    let scale = if lw > 0 && width > 0 { width as f64 / lw as f64 } else { 1.0 };
+    *HOST_POINTER.lock().unwrap() = Some(crate::wayland::frontend::PointerAt {
+        x: lx as f64 * scale + x as f64,
+        y: ly as f64 * scale + y as f64,
+        scale,
+        motion: HOST_MOTION.load(Ordering::Relaxed),
+    });
 }
 
 /// The fixated format of a stream.
@@ -443,6 +468,7 @@ unsafe fn read_cursor(shared: &Shared, meta: &SpaMeta) {
         ((cursor.x as i64) << 32) | (cursor.y as u32 as i64),
         Ordering::Relaxed,
     );
+    publish_host_pointer(shared, cursor.x, cursor.y);
     if cursor.bitmap_offset < std::mem::size_of::<SpaMetaCursor>() as u32
         || cursor.bitmap_offset + std::mem::size_of::<SpaMetaBitmap>() as u32 > meta.size
     {
@@ -1085,6 +1111,7 @@ mod tests {
             ],
             fps_milli: 59_940,
             expect: (1920, 1080),
+            layout: (0, 0, 1920, 1080),
         }
     }
 
