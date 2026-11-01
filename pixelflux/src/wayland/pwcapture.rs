@@ -46,7 +46,9 @@ const FOURCC_AR24: u32 = 0x3432_5241;
 const FOURCC_XB24: u32 = 0x3432_4258;
 const FOURCC_AB24: u32 = 0x3432_4241;
 const MAX_DAMAGE_REGIONS: u32 = 16;
-const MAX_CURSOR_EDGE: u32 = 256;
+/// Mutter offers its cursor meta at one fixed size, `CURSOR_META_SIZE(384, 384)`; a range
+/// topping out below it fails that negotiation and the buffers carry no cursor meta at all.
+const MAX_CURSOR_EDGE: u32 = 512;
 
 /// The SPA pixel formats a consumer of BGRA-order pixels takes, best first, with the DRM fourcc
 /// each corresponds to (SPA names byte order, DRM names the little-endian word).
