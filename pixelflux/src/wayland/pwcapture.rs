@@ -458,9 +458,23 @@ unsafe extern "C" fn on_remove_buffer(data: *mut c_void, b: *mut PwBuffer) {
 /// worker (an empty sprite hides it).
 unsafe fn read_cursor(shared: &Shared, meta: &SpaMeta) {
     if meta.size < std::mem::size_of::<SpaMetaCursor>() as u32 || meta.data.is_null() {
+        if std::env::var_os("PIXELFLUX_CURSOR_TRACE").is_some() {
+            eprintln!("[CursorTrace] meta too small: size={} null={}", meta.size, meta.data.is_null());
+        }
         return;
     }
     let cursor = unsafe { &*(meta.data as *const SpaMetaCursor) };
+    if std::env::var_os("PIXELFLUX_CURSOR_TRACE").is_some() {
+        static SEEN: AtomicU64 = AtomicU64::new(0);
+        let n = SEEN.fetch_add(1, Ordering::Relaxed);
+        if n < 20 || n % 300 == 0 {
+            eprintln!(
+                "[CursorTrace] #{n} id={} flags={} pos={},{} hot={},{} bitmap_offset={} meta_size={}",
+                cursor.id, cursor.flags, cursor.x, cursor.y, cursor.hot_x, cursor.hot_y,
+                cursor.bitmap_offset, meta.size
+            );
+        }
+    }
     if cursor.id == 0 {
         return;
     }
