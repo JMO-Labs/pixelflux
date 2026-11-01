@@ -6845,9 +6845,12 @@ impl WaylandBackend {
     /// rather than summed from what was injected. None before the first pass and under host
     /// capture, whose pointer is the host's. Never waits on the compositor.
     fn pointer_location(&self) -> Option<(f64, f64, f64, u64)> {
-        self.pointer
-            .read()
-            .or_else(|| *crate::wayland::pwcapture::HOST_POINTER.lock().unwrap())
+        // Host capture first: the compositor's own share may hold a pass from before the
+        // host session attached, frozen there since (its publish skips host capture).
+        crate::wayland::pwcapture::HOST_POINTER
+            .lock()
+            .unwrap()
+            .or_else(|| self.pointer.read())
             .map(|at| (at.x, at.y, at.scale, at.motion))
     }
 
