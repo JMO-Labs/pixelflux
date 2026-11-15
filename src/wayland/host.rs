@@ -2773,9 +2773,11 @@ fn write_layout_request(path: &std::ffi::OsStr, state: &CtrlState, slots: &[Layo
     // A capture restarting at the size the host already runs asks for nothing new: writing
     // it would overwrite the real request before the helper reads it.
     let sizes = state.sizes.lock().unwrap().clone();
-    let echo = slots.iter().enumerate().filter(|(_, s)| s.active).all(|(i, s)| {
-        state.order.get(i).and_then(|&oi| sizes.get(oi)) == Some(&s.want)
-    });
+    let echo = slots
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.active)
+        .all(|(i, s)| state.order.get(i).and_then(|&oi| sizes.get(oi)) == Some(&s.want));
     if echo {
         return;
     }
