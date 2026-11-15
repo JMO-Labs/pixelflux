@@ -2686,6 +2686,9 @@ fn apply_layout(
     slots: &[LayoutSlot],
 ) -> bool {
     let Some(mgr) = state.output_mgr.clone() else {
+        if let Some(path) = std::env::var_os("PIXELFLUX_HOST_LAYOUT_FILE") {
+            write_layout_request(&path, state, slots);
+        }
         eprintln!(
             "[HostCapture] host lacks zwlr_output_manager_v1; capture follows the host's own size."
         );
@@ -2760,6 +2763,42 @@ fn apply_layout(
         return true;
     }
     false
+}
+
+/// A host without wlr-output-management (Mutter) gets the wanted layout as a file instead:
+/// one `name x y width height` line per active output, written atomically, for a helper
+/// that owns the host's outputs to apply. Capture still follows the host's own size, so the
+/// helper's change arrives as an ordinary host resize.
+fn write_layout_request(path: &std::ffi::OsStr, state: &CtrlState, slots: &[LayoutSlot]) {
+    // A capture restarting at the size the host already runs asks for nothing new: writing
+    // it would overwrite the real request before the helper reads it.
+    let sizes = state.sizes.lock().unwrap().clone();
+    let echo = slots.iter().enumerate().filter(|(_, s)| s.active).all(|(i, s)| {
+        state.order.get(i).and_then(|&oi| sizes.get(oi)) == Some(&s.want)
+    });
+    if echo {
+        return;
+    }
+    let mut text = String::new();
+    for (i, slot) in slots.iter().enumerate() {
+        if !slot.active {
+            continue;
+        }
+        let name = state
+            .order
+            .get(i)
+            .and_then(|&oi| state.outputs.get(oi))
+            .and_then(|(_, n)| n.clone())
+            .unwrap_or_else(|| format!("#{i}"));
+        text.push_str(&format!(
+            "{name} {} {} {} {}\n",
+            slot.pos.0, slot.pos.1, slot.want.0, slot.want.1
+        ));
+    }
+    let tmp = std::path::PathBuf::from(path).with_extension("tmp");
+    if let Err(e) = std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, path)) {
+        eprintln!("[HostCapture] layout request not written: {e}");
+    }
 }
 
 /// One bounded dispatch step for the control connection (false = connection died).
