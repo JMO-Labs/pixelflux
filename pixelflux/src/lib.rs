@@ -5279,6 +5279,11 @@ fn reposition_output_on(state: &mut AppState, id: u32, x: i32, y: i32) -> bool {
     }
     if let Some(host) = state.host.as_ref() {
         host.set_layout(id, x, y);
+        // A view captures under its own display id: its host layout entry moves with
+        // the screen it is cut from, or the host keeps the old position.
+        for view in state.output_nodes.iter().filter(|n| n.owner == Some(id)) {
+            host.set_layout(view.id, view.pos.0, view.pos.1);
+        }
     }
     output.change_current_state(None, None, None, Some((x, y).into()));
     state.space.map_output(&output, (x, y));
