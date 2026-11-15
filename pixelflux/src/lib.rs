@@ -5029,7 +5029,9 @@ fn create_output_on(
     // the host's count would exist but never receive a frame. Refuse it instead.
     if let Some(host) = state.host.as_ref() {
         let capacity = host.output_count();
-        if state.output_nodes.len() >= capacity {
+        // Views are cut from a screen and back no host output of their own: count screens.
+        let screens = state.output_nodes.iter().filter(|n| n.owner.is_none()).count();
+        if screens >= capacity {
             eprintln!(
                 "[Wayland] CreateOutput {id}: rejected, the host compositor has {capacity} output(s) and all are backing displays."
             );
